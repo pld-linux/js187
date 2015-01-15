@@ -3,13 +3,17 @@
 # but some still do (includes path, js-config, js shell).
 # It's somehow messy, so let's put this version in separate js187 package for now,
 # until upstream decides which way to go in the future.
+#
+# Conditional build:
+%bcond_without	default_js	# build as default js package
+
 Summary:	SpiderMonkey JavaScript 1.8.7 implementation
 Summary(pl.UTF-8):	Implementacja SpiderMonkey języka JavaScript 1.8.7
 Name:		js187
 Version:	1.0.0
-Release:	1
+Release:	2
 License:	MPL 1.1 or GPL v2+ or LGPL v2.1+
-Group:		Libraries
+Group:		Development/Languages
 #Source0:	http://ftp.mozilla.org/pub/mozilla.org/js/%{name}-%{version}.tar.gz
 Source0:	%{name}-%{version}.tar.gz
 # Source0-md5:	9399466aa36e98e157cb3780c3f96dde
@@ -24,9 +28,11 @@ BuildRequires:	readline-devel
 BuildRequires:	rpm-perlprov
 BuildRequires:	rpmbuild(macros) >= 1.294
 BuildRequires:	sed >= 4.0
-Requires:	nspr >= 4.7.0
+Requires:	%{name}-libs = %{version}-%{release}
+%if %{with default_js}
 Provides:	js = 2:1.8.7
 Obsoletes:	js < 2:1.8.7
+%endif
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 %description
@@ -43,35 +49,52 @@ dekompilator, odśmiecacz, standardowe klasy) i niewielką powłokę,
 która może być używana interaktywnie lub z plikami .js do uruchamiania
 skryptów.
 
+%package libs
+Summary:	SpiderMonkey JavaScript 1.8.7 library
+Summary(pl.UTF-8):	Biblioteka SpiderMonkey JavaScript 1.8.7
+Group:		Libraries
+Requires:	nspr >= 4.7.0
+Conflicts:	js187 < 1.0.0-2
+
+%description libs
+SpiderMonkey JavaScript 1.8.7 library.
+
+%description libs -l pl.UTF-8
+Biblioteka SpiderMonkey JavaScript 1.8.7.
+
 %package devel
-Summary:	Header files for JavaScript reference library
-Summary(pl.UTF-8):	Pliki nagłówkowe do biblioteki JavaScript
+Summary:	Header files for JavaScript 1.8.7 reference library
+Summary(pl.UTF-8):	Pliki nagłówkowe biblioteki JavaScript 1.8.7
 Group:		Development/Libraries
-Requires:	%{name} = %{version}-%{release}
+Requires:	%{name}-libs = %{version}-%{release}
 Requires:	libstdc++-devel
 Requires:	nspr-devel >= 4.7.0
+%if %{with default_js}
 Provides:	js-devel = 2:1.8.7
 Obsoletes:	js-devel < 2:1.8.7
+%endif
 
 %description devel
-Header files for JavaScript reference library.
+Header files for JavaScript 1.8.7 reference library.
 
 %description devel -l pl.UTF-8
-Pliki nagłówkowe do biblioteki JavaScript.
+Pliki nagłówkowe biblioteki JavaScript 1.8.7.
 
 %package static
-Summary:	Static JavaScript reference library
-Summary(pl.UTF-8):	Statyczna biblioteka JavaScript
+Summary:	Static JavaScript 1.8.7 reference library
+Summary(pl.UTF-8):	Statyczna biblioteka JavaScript 1.8.7
 Group:		Development/Libraries
 Requires:	%{name}-devel = %{version}-%{release}
+%if %{with default_js}
 Provides:	js-static = 2:1.8.7
 Obsoletes:	js-static < 2:1.8.7
+%endif
 
 %description static
-Static version of JavaScript reference library.
+Static version of JavaScript 1.8.7 reference library.
 
 %description static -l pl.UTF-8
-Statyczna wersja biblioteki JavaScript.
+Statyczna wersja biblioteki JavaScript 1.8.7.
 
 %prep
 %setup -q -n js-1.8.7
@@ -98,45 +121,74 @@ rm -rf $RPM_BUILD_ROOT
 
 %{__make} -j1 -C js/src install \
 	DESTDIR=$RPM_BUILD_ROOT \
-	MOZILLA_VERSION=%{version}
+	MOZILLA_VERSION=%{version} \
+	MODULE=%{name}
 
 # not installed by make install
-cp -aL js/src/dist/include/{ds,gc,js,mozilla,vm} $RPM_BUILD_ROOT%{_includedir}/js
+cp -aL js/src/dist/include/{ds,gc,js,mozilla,vm} $RPM_BUILD_ROOT%{_includedir}/js187
 
 # not installed by make install in new buildsystem
-install js/src/shell/js $RPM_BUILD_ROOT%{_bindir}
+install js/src/shell/js $RPM_BUILD_ROOT%{_bindir}/js187
 
-# provide libjs.so for backward compability at build time
-# (don't provide libjs.so.1 as the libraries are not binary-compatible)
-ln -sf libmozjs187.so $RPM_BUILD_ROOT%{_libdir}/libjs.so
-ln -sf libmozjs187-1.0.a $RPM_BUILD_ROOT%{_libdir}/libjs.a
+%{__mv} $RPM_BUILD_ROOT%{_bindir}/js-config $RPM_BUILD_ROOT%{_bindir}/js187-config
 
 # fix symlinks pointing to buildroot
 ln -sf libmozjs187.so.1.0 $RPM_BUILD_ROOT%{_libdir}/libmozjs187.so
 ln -sf libmozjs187.so.1.0.0 $RPM_BUILD_ROOT%{_libdir}/libmozjs187.so.1.0
 
+%if %{with default_js}
+# provide symlinks as default js implementation
+# (don't provide libjs.so.1 as the libraries are not binary-compatible)
+ln -sf libmozjs187.so $RPM_BUILD_ROOT%{_libdir}/libjs.so
+ln -sf libmozjs187-1.0.a $RPM_BUILD_ROOT%{_libdir}/libjs.a
+ln -sf js187 $RPM_BUILD_ROOT%{_includedir}/js
+ln -sf js187 $RPM_BUILD_ROOT%{_bindir}/js
+ln -sf js187-config $RPM_BUILD_ROOT%{_bindir}/js-config
+%else
+%{__sed} -i -e 's,/js$,/js187,' $RPM_BUILD_ROOT%{_pkgconfigdir}/mozjs187.pc
+%endif
+
 %clean
 rm -rf $RPM_BUILD_ROOT
 
-%post	-p /sbin/ldconfig
-%postun	-p /sbin/ldconfig
+%post	libs -p /sbin/ldconfig
+%postun	libs -p /sbin/ldconfig
+
+%if %{with default_js}
+%pretrans devel
+if [ -d %{_includedir}/js ] && [ ! -L %{_includedir}/js ]; then
+	rm -rf /usr/include/js
+fi
+%endif
 
 %files
 %defattr(644,root,root,755)
 %doc js/src/README.html
+%attr(755,root,root) %{_bindir}/js187
+%if %{with default_js}
 %attr(755,root,root) %{_bindir}/js
+%endif
+
+%files libs
+%defattr(644,root,root,755)
 %attr(755,root,root) %{_libdir}/libmozjs187.so.*.*.*
 %attr(755,root,root) %ghost %{_libdir}/libmozjs187.so.1.0
 
 %files devel
 %defattr(644,root,root,755)
+%attr(755,root,root) %{_bindir}/js187-config
+%attr(755,root,root) %{_libdir}/libmozjs187.so
+%{_includedir}/js187
+%{_pkgconfigdir}/mozjs187.pc
+%if %{with default_js}
 %attr(755,root,root) %{_bindir}/js-config
 %attr(755,root,root) %{_libdir}/libjs.so
-%attr(755,root,root) %{_libdir}/libmozjs187.so
 %{_includedir}/js
-%{_pkgconfigdir}/mozjs187.pc
+%endif
 
 %files static
 %defattr(644,root,root,755)
-%{_libdir}/libjs.a
 %{_libdir}/libmozjs187-1.0.a
+%if %{with default_js}
+%{_libdir}/libjs.a
+%endif
