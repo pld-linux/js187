@@ -11,7 +11,7 @@ Summary:	SpiderMonkey JavaScript 1.8.7 implementation
 Summary(pl.UTF-8):	Implementacja SpiderMonkey języka JavaScript 1.8.7
 Name:		js187
 Version:	1.0.0
-Release:	5
+Release:	6
 License:	MPL 1.1 or GPL v2+ or LGPL v2.1+
 Group:		Development/Languages
 #Source0:	http://ftp.mozilla.org/pub/mozilla.org/js/%{name}-%{version}.tar.gz
@@ -104,6 +104,7 @@ Statyczna wersja biblioteki JavaScript 1.8.7.
 sed -i -e 's/-O3//' js/src/Makefile.in js/src/config/Makefile.in
 
 %build
+export CXXFLAGS="%{rpmcxxflags} -fpermissive"
 cd js/src
 %configure2_13 \
 	--enable-readline \
